@@ -7,7 +7,7 @@ Author URI: http://mahabub.me
 Description: Recent post widget plugin for wordpress site sidebar. In author can view author recent post or all recent post.
 Version: 1.0.0
 */
-
+define('SM_RECENT_POSTS_URL',plugin_dir_url( __FILE__ ));
 class SMRecentPost_Widget extends WP_Widget {
 
     /**
@@ -31,25 +31,56 @@ class SMRecentPost_Widget extends WP_Widget {
         // outputs the content of the widget
         extract( $args );
 
-        $title      	        = apply_filters( 'widget_title', $instance['title'] );
-        $number_of_posts        = ($instance['number_of_posts'])?$instance['number_of_posts']:5;
-        $date_show              = ($instance['date_show'])?1:0;
-        $author_post_only       = ($instance['author_post_only'])?1:0;
+        if ( ! isset( $args['widget_id'] ) ) {
+            $args['widget_id'] = $this->id;
+        }
+
+        $title              = ( ! empty( $instance['title'] ) ) ? $instance['title'] : __( 'Recent Posts' );
+        $title              = apply_filters( 'widget_title', $title, $instance, $this->id_base );
+
+        $number_of_posts    = ( ! empty( $instance['number_of_posts'] ) ) ? absint( $instance['number_of_posts'] ) : 5;
+        if ( ! $number_of_posts )
+            $number_of_posts = 5;
+        $date_show          = isset( $instance['date_show'] ) ? $instance['date_show'] : false;
+        $author_post_only          = isset( $instance['author_post_only'] ) ? $instance['author_post_only'] : false;
+
         echo $before_widget;
         if ( $title ) {
             echo $before_title . $title . $after_title;
         }
-        $args=array( 'posts_per_page' => $number_of_posts );
+        $args=array(
+                'posts_per_page'    => $number_of_posts,
+                'post_status'       => 'publish',
+            );
         if ( is_author() AND $author_post_only  ) {
             $author = get_user_by( 'slug', get_query_var( 'author_name' ) );
             $args['author'] =   $author->ID;
         }
         $the_query = new WP_Query( $args );
 
-        if ( $the_query->have_posts() ) :
-            echo "<ul>";
+        if ( $the_query->have_posts() ) : ?>
+            <style>
+                #sm_recent_post{
+                    list-style: none;
+                }
+                #sm_recent_post li {
+                    padding: 5px 0px;
+                    border-bottom: 1px dashed #ace9ff;
+                }
+            </style>
+            <ul id='sm_recent_post'>
+            <?php
             while ( $the_query->have_posts() ) : $the_query->the_post(); ?>
                 <li>
+                    <?php if ( has_post_thumbnail() ) : ?>
+                        <a href="<?php the_permalink(); ?>" title="<?php the_title_attribute(); ?>">
+                            <?php the_post_thumbnail(array(70,70)); ?>
+                        </a>
+                    <?php else: ?>
+                        <a href="<?php the_permalink(); ?>" title="<?php the_title_attribute(); ?>">
+                            <img src="<?=SM_RECENT_POSTS_URL?>assets/img/no-thumbnail.png" width="70" height="70">
+                        </a>
+                    <?php endif; ?>
                     <a href="<?php the_permalink();?>"><?php the_title(); ?></a>
                     <?php if($date_show): ?>
                     <span class="post-date"><?=get_the_date( 'F j, Y' );?></span>
@@ -75,8 +106,11 @@ class SMRecentPost_Widget extends WP_Widget {
      */
     public function form( $instance ) {
         // outputs the options form on admin
-        $title      	= esc_attr( $instance['title'] );
-        $number_of_posts    	= esc_attr( $instance['number_of_posts'] );
+        $title      	        = isset( $instance['title'] ) ? esc_attr( $instance['title'] ) : '';
+        $number_of_posts        = isset( $instance['number_of_posts'] ) ? absint( $instance['number_of_posts'] ) : 5;
+        $date_show              = isset( $instance['date_show'] ) ? (bool) $instance['date_show'] : false;
+        $author_post_only       = isset( $instance['author_post_only'] ) ? (bool) $instance['author_post_only'] : false;
+
         ?>
         <p>
             <label for="<?php echo $this->get_field_id('title'); ?>"><?php _e('Title:'); ?></label>
@@ -88,7 +122,7 @@ class SMRecentPost_Widget extends WP_Widget {
         </p>
 
         <p>
-            <input class="checkbox" type="checkbox" <?php checked( $instance[ 'date_show' ], 'on' ); ?> id="<?php echo $this->get_field_id( 'date_show' ); ?>" name="<?php echo $this->get_field_name( 'date_show' ); ?>" />
+            <input class="checkbox" type="checkbox" <?php checked( $date_show); ?> id="<?php echo $this->get_field_id( 'date_show' ); ?>" name="<?php echo $this->get_field_name( 'date_show' ); ?>" />
             <label for="<?php echo $this->get_field_id( 'date_show' ); ?>">Display post date?</label>
         </p>
 
@@ -97,7 +131,7 @@ class SMRecentPost_Widget extends WP_Widget {
             <h3>Author Page Settings :</h3>
         </p>
         <p>
-            <input class="checkbox" type="checkbox" <?php checked( $instance[ 'author_post_only' ], 'on' ); ?> id="<?php echo $this->get_field_id( 'author_post_only' ); ?>" name="<?php echo $this->get_field_name( 'author_post_only' ); ?>" />
+            <input class="checkbox" type="checkbox" <?php checked( $author_post_only ); ?> id="<?php echo $this->get_field_id( 'author_post_only' ); ?>" name="<?php echo $this->get_field_name( 'author_post_only' ); ?>" />
             <label for="<?php echo $this->get_field_id( 'author_post_only' ); ?>">Author post show only ?</label>
         </p>
 
@@ -114,11 +148,10 @@ class SMRecentPost_Widget extends WP_Widget {
         // processes widget options to be saved
         $instance = $old_instance;
 
-        $instance['title'] 		        = strip_tags( $new_instance['title'] );
-        $instance['number_of_posts']    = strip_tags( $new_instance['number_of_posts']);
-        $instance['date_show']          = strip_tags( $new_instance['date_show']);
-        $instance['author_post_only']   = strip_tags( $new_instance['author_post_only']);
-
+        $instance['title']              = sanitize_text_field( $new_instance['title'] );
+        $instance['number_of_posts']    = (int) $new_instance['number_of_posts'];
+        $instance['date_show']          = isset( $new_instance['date_show'] ) ? (bool) $new_instance['date_show'] : false;
+        $instance['author_post_only']   = isset( $new_instance['author_post_only'] ) ? (bool) $new_instance['author_post_only'] : false;
 
         return $instance;
     }
